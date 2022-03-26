@@ -36,6 +36,9 @@ static void Error_Handler(void);
 
 static void ExtBtn_Config();
 static void MotorDriver_Config();
+static void TIM3_Config();
+
+TIM_HandleTypeDef Tim3_Handle;
 
 static int direction = CW;
 static int mode = FULLSTEP;
@@ -75,6 +78,7 @@ int main(void){
 		BSP_PB_Init(BUTTON_KEY, BUTTON_MODE_EXTI);
 		ExtBtn_Config();
 		MotorDriver_Config();
+		TIM3_Config();
 
 
 		BSP_LCD_Init();
@@ -93,10 +97,12 @@ int main(void){
 		LCD_DisplayString(2, 3, (uint8_t *)"Lab");
 	
 		LCD_DisplayInt(2, 8, 5);
-			
-			
-		
+
 		UpdateSettings();
+
+		// Start timer
+		HAL_TIM_Base_Start_IT(&Tim3_Handle);
+
 		int incremCount = 0;
 		int decremCount = 0;
 		
@@ -125,11 +131,7 @@ int main(void){
 				// reset the count
 				decremCount = 0;
 			}
-			
-			StepperWrite(stepperState);
-			stepperState = (stepperState + 1) % 8;
-
-			HAL_Delay(1000);
+			HAL_Delay(100);
 
 		} // end of while loop
 	
@@ -326,6 +328,21 @@ static void MotorDriver_Config() {
 	HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
 }
 
+static void TIM3_Config(void) {
+	/*
+	Prescaler calculation:
+	APB1 clock has a frequency of SystemCoreClock / 2 (~90MHz)
+	For stepper motor: (~90MHz)/(4800Hz) - 1 = ~18749
+	*/
+	Tim3_Handle.Instance = TIM3;
+	Tim3_Handle.Init.Period = 6000; // temporary, changed as needed
+	Tim3_Handle.Init.Prescaler = ((SystemCoreClock / 2) / 4800) - 1; // fixed
+	Tim3_Handle.Init.ClockDivision = 0;
+	Tim3_Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
+	HAL_TIM_Base_Init(&Tim3_Handle);
+}
+
+
 static void UpdateSettings() {
 	BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
 	LCD_DisplayString(5, 1, (uint8_t *) "direction");
@@ -369,15 +386,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		} //end of if PIN_23
 }
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)   //see  stm32fxx_hal_tim.c for different callback function names.
+																															//for timer 3 , Timer 3 use update event initerrupt
+{
+	StepperWrite(stepperState);
+	stepperState = (stepperState + 1) % 8;
+}
 
 
 void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef * htim) //see  stm32fxx_hal_tim.c for different callback function names. 
 {																																//for timer4 
-			
-				
-				
-			
-	
 }
  
 static void Error_Handler(void)

@@ -221,11 +221,11 @@ void ADC_IRQHandler(void){
 
 }
 
-
+extern TIM_HandleTypeDef Tim3_Handle;
 void TIM3_IRQHandler(void)
 {
   
-	//HAL_TIM_IRQHandler(&Tim3_Handle);
+	HAL_TIM_IRQHandler(&Tim3_Handle);
 }
 
 
