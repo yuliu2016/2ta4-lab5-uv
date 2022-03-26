@@ -14,9 +14,9 @@ Button 1: PC1
 Button 2: PD2
 Button 3: PC3
 Red: PC4
-Gray: PB2
-Yellow: PB12
-Black: PB14
+Gray: PC5
+Yellow: PB2
+Black: PB12
 */
 
 
@@ -35,12 +35,26 @@ static void SystemClock_Config(void);
 static void Error_Handler(void);
 
 static void ExtBtn_Config();
+static void MotorDriver_Config();
 
 static int direction = CW;
 static int mode = FULLSTEP;
 static int period = 61;
+static int stepperState = 0;
 
-static void UpdateState();
+static const uint8_t sequence[8][4] = {
+	{0, 0, 1, 0},
+	{0, 1, 1, 0},
+	{0, 1, 0, 0},
+	{0, 1, 0, 1},
+	{0, 0, 0, 1},
+	{1, 0, 0, 1},
+	{1, 0, 0, 0},
+	{1, 0, 1, 0}
+};
+
+static void StepperWrite(int state);
+static void UpdateSettings();
 
 int main(void){
 	
@@ -60,6 +74,7 @@ int main(void){
 	
 		BSP_PB_Init(BUTTON_KEY, BUTTON_MODE_EXTI);
 		ExtBtn_Config();
+		MotorDriver_Config();
 
 
 		BSP_LCD_Init();
@@ -81,7 +96,7 @@ int main(void){
 			
 			
 		
-		UpdateState();
+		UpdateSettings();
 		int incremCount = 0;
 		int decremCount = 0;
 		
@@ -92,7 +107,7 @@ int main(void){
 			if (incremDown) {
 				if (++incremCount >= 6) {
 					period++;
-					UpdateState();
+					UpdateSettings();
 				}
 			} else {
 				// reset the count
@@ -103,15 +118,19 @@ int main(void){
 				if (++decremCount >= 6) {
 					if (period > 5) {
 						period--;
-						UpdateState();
+						UpdateSettings();
 					}
 				}
 			} else {
 				// reset the count
 				decremCount = 0;
 			}
-			HAL_Delay(100);
 			
+			StepperWrite(stepperState);
+			stepperState = (stepperState + 1) % 8;
+
+			HAL_Delay(1000);
+
 		} // end of while loop
 	
 }  //end of main
@@ -225,44 +244,89 @@ static void ExtBtn_Config() {
 	GPIO_InitTypeDef GPIO_InitStructure;
 
 	// Clock Enable
-  __HAL_RCC_GPIOC_CLK_ENABLE();
+	__HAL_RCC_GPIOC_CLK_ENABLE();
 	__HAL_RCC_GPIOD_CLK_ENABLE();
 
 	// PC1
-  GPIO_InitStructure.Mode =  GPIO_MODE_IT_FALLING;
-  GPIO_InitStructure.Pull = GPIO_PULLUP;
-  GPIO_InitStructure.Pin = GPIO_PIN_1;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
+	GPIO_InitStructure.Mode = GPIO_MODE_IT_FALLING;
+	GPIO_InitStructure.Pull = GPIO_PULLUP;
+	GPIO_InitStructure.Pin = GPIO_PIN_1;
+	HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
 
 	__HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_1);
 
-  HAL_NVIC_SetPriority(EXTI1_IRQn, 3, 0);
-  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+	HAL_NVIC_SetPriority(EXTI1_IRQn, 3, 0);
+	HAL_NVIC_EnableIRQ(EXTI1_IRQn);
 
 	// PD2
-  GPIO_InitStructure.Mode =  GPIO_MODE_IT_FALLING;
-  GPIO_InitStructure.Pull = GPIO_PULLUP;
-  GPIO_InitStructure.Pin = GPIO_PIN_2;
-  HAL_GPIO_Init(GPIOD, &GPIO_InitStructure);
+	GPIO_InitStructure.Mode = GPIO_MODE_IT_FALLING;
+	GPIO_InitStructure.Pull = GPIO_PULLUP;
+	GPIO_InitStructure.Pin = GPIO_PIN_2;
+	HAL_GPIO_Init(GPIOD, &GPIO_InitStructure);
 
 	__HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_2);
 
-  HAL_NVIC_SetPriority(EXTI2_IRQn, 3, 0);
-  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
+	HAL_NVIC_SetPriority(EXTI2_IRQn, 3, 0);
+	HAL_NVIC_EnableIRQ(EXTI2_IRQn);
 
 	// PC3
-  GPIO_InitStructure.Mode =  GPIO_MODE_IT_FALLING;
-  GPIO_InitStructure.Pull = GPIO_PULLUP;
-  GPIO_InitStructure.Pin = GPIO_PIN_3;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
+	GPIO_InitStructure.Mode = GPIO_MODE_IT_FALLING;
+	GPIO_InitStructure.Pull = GPIO_PULLUP;
+	GPIO_InitStructure.Pin = GPIO_PIN_3;
+	HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
 
 	__HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_3);
 
-  HAL_NVIC_SetPriority(EXTI3_IRQn, 3, 0);
-  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+	HAL_NVIC_SetPriority(EXTI3_IRQn, 3, 0);
+	HAL_NVIC_EnableIRQ(EXTI3_IRQn);
 }
 
-static void UpdateState() {
+static void StepperWrite(int state) {
+	uint8_t *pin_for_state = &sequence[state];
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, pin_for_state[0]);
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, pin_for_state[1]);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, pin_for_state[2]);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, pin_for_state[3]);
+
+	LCD_DisplayInt(11,3, pin_for_state[0]);
+	LCD_DisplayInt(12,3, pin_for_state[1]);
+	LCD_DisplayInt(13,3, pin_for_state[2]);
+	LCD_DisplayInt(14,3, pin_for_state[3]);
+}
+
+static void MotorDriver_Config() {
+	GPIO_InitTypeDef GPIO_InitStructure;
+
+	// Clock Enable
+	__HAL_RCC_GPIOB_CLK_ENABLE();
+	__HAL_RCC_GPIOC_CLK_ENABLE();
+
+	// PC4
+	GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStructure.Pull = GPIO_NOPULL;
+	GPIO_InitStructure.Pin = GPIO_PIN_4;
+	HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
+
+	// PC5
+	GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStructure.Pull = GPIO_NOPULL;
+	GPIO_InitStructure.Pin = GPIO_PIN_5;
+	HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
+
+	// PB2
+	GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStructure.Pull = GPIO_NOPULL;
+	GPIO_InitStructure.Pin = GPIO_PIN_2;
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+	// PB12
+	GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStructure.Pull = GPIO_NOPULL;
+	GPIO_InitStructure.Pin = GPIO_PIN_12;
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
+}
+
+static void UpdateSettings() {
 	BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
 	LCD_DisplayString(5, 1, (uint8_t *) "direction");
 	LCD_DisplayString(6, 1, (uint8_t *) "step mode");
@@ -280,27 +344,27 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		if(GPIO_Pin == KEY_BUTTON_PIN)  //GPIO_PIN_0
 		{
 			direction = direction == CW ? CCW : CW;
-			UpdateState();
+			UpdateSettings();
 		}
 		
 		
 		if(GPIO_Pin == GPIO_PIN_1)
 		{
 			period++;
-			UpdateState();
+			UpdateSettings();
 		}  //end of PIN_1
 
 		if(GPIO_Pin == GPIO_PIN_2)
 		{
 			mode = mode == FULLSTEP ? HALFSTEP : FULLSTEP;
-			UpdateState();
+			UpdateSettings();
 		} //end of if PIN_2	
 		
 		if(GPIO_Pin == GPIO_PIN_3)
 		{
 			if (period > 5) {
 				period--;
-				UpdateState();
+				UpdateSettings();
 			}
 		} //end of if PIN_23
 }
