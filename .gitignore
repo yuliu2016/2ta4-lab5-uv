@@ -1,0 +1,9 @@
+Objects/
+Listings/
+DebugConfig/
+*.uvguix.*
+.history/
+.vscode/
+.settings/
+build/
+
