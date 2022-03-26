@@ -40,10 +40,10 @@ static void TIM3_Config();
 
 TIM_HandleTypeDef Tim3_Handle;
 
-static int direction = CW;
-static int mode = FULLSTEP;
-static int period = 61;
-static int stepperState = 0;
+static uint8_t direction = CW;
+static uint8_t mode = FULLSTEP;
+static uint16_t period = 61;
+static uint16_t stepperState = 0;
 
 static const uint8_t sequence[8][4] = {
 	{0, 0, 1, 0},
@@ -56,7 +56,7 @@ static const uint8_t sequence[8][4] = {
 	{1, 0, 1, 0}
 };
 
-static void StepperWrite(int state);
+static void StepperWrite(uint16_t state);
 static void UpdateSettings();
 
 int main(void){
@@ -283,7 +283,7 @@ static void ExtBtn_Config() {
 	HAL_NVIC_EnableIRQ(EXTI3_IRQn);
 }
 
-static void StepperWrite(int state) {
+static void StepperWrite(uint16_t state) {
 	uint8_t *pin_for_state = &sequence[state];
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, pin_for_state[0]);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, pin_for_state[1]);
@@ -389,8 +389,22 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)   //see  stm32fxx_hal_tim.c for different callback function names.
 																															//for timer 3 , Timer 3 use update event initerrupt
 {
+	if (direction == CW) {
+		if (mode == FULLSTEP && stepperState % 2 != 0) {
+			stepperState += 2;
+		} else {
+			stepperState += 1;
+		}
+	} else {
+		if (mode == FULLSTEP && stepperState % 2 != 0) {
+			stepperState -= 2;
+		} else {
+			stepperState -= 1;
+		}
+	}
+	stepperState %= 8; // wrap around
+	LCD_DisplayInt(9, 12, stepperState);
 	StepperWrite(stepperState);
-	stepperState = (stepperState + 1) % 8;
 }
 
 
