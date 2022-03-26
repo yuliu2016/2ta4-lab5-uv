@@ -8,7 +8,16 @@
  2. the signals do not need to be inverted before feeded in H-bridge! 
 */
 
-
+/*
+Pins:
+Button 1: PC1
+Button 2: PD2
+Button 3: PC3
+Red: PC4
+Gray: PB2
+Yellow: PB12
+Black: PB14
+*/
 
 
 #include "main.h"
@@ -24,6 +33,14 @@ void LCD_DisplayFloat(uint16_t LineNumber, uint16_t ColumnNumber, float Number, 
 
 static void SystemClock_Config(void);
 static void Error_Handler(void);
+
+static void ExtBtn_Config();
+
+static int direction = CW;
+static int mode = FULLSTEP;
+static int period = 61;
+
+static void UpdateState();
 
 int main(void){
 	
@@ -41,6 +58,9 @@ int main(void){
 		
 		HAL_InitTick(0x0000); // set systick's priority to the highest.
 	
+		BSP_PB_Init(BUTTON_KEY, BUTTON_MODE_EXTI);
+		ExtBtn_Config();
+
 
 		BSP_LCD_Init();
 		//BSP_LCD_LayerDefaultInit(uint16_t LayerIndex, uint32_t FB_Address);
@@ -61,9 +81,36 @@ int main(void){
 			
 			
 		
+		UpdateState();
+		int incremCount = 0;
+		int decremCount = 0;
 		
 		while(1) {	
+			int incremDown = !HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_1);
+			int decremDown = !HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_3);
 
+			if (incremDown) {
+				if (++incremCount >= 6) {
+					period++;
+					UpdateState();
+				}
+			} else {
+				// reset the count
+				incremCount = 0;
+			}
+
+			if (decremDown) {
+				if (++decremCount >= 6) {
+					if (period > 5) {
+						period--;
+						UpdateState();
+					}
+				}
+			} else {
+				// reset the count
+				decremCount = 0;
+			}
+			HAL_Delay(100);
 			
 		} // end of while loop
 	
@@ -174,34 +221,87 @@ void LCD_DisplayFloat(uint16_t LineNumber, uint16_t ColumnNumber, float Number, 
 }
 
 
+static void ExtBtn_Config() {
+	GPIO_InitTypeDef GPIO_InitStructure;
+
+	// Clock Enable
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+	__HAL_RCC_GPIOD_CLK_ENABLE();
+
+	// PC1
+  GPIO_InitStructure.Mode =  GPIO_MODE_IT_FALLING;
+  GPIO_InitStructure.Pull = GPIO_PULLUP;
+  GPIO_InitStructure.Pin = GPIO_PIN_1;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
+
+	__HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_1);
+
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 3, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+
+	// PD2
+  GPIO_InitStructure.Mode =  GPIO_MODE_IT_FALLING;
+  GPIO_InitStructure.Pull = GPIO_PULLUP;
+  GPIO_InitStructure.Pin = GPIO_PIN_2;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStructure);
+
+	__HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_2);
+
+  HAL_NVIC_SetPriority(EXTI2_IRQn, 3, 0);
+  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
+
+	// PC3
+  GPIO_InitStructure.Mode =  GPIO_MODE_IT_FALLING;
+  GPIO_InitStructure.Pull = GPIO_PULLUP;
+  GPIO_InitStructure.Pin = GPIO_PIN_3;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStructure);
+
+	__HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_3);
+
+  HAL_NVIC_SetPriority(EXTI3_IRQn, 3, 0);
+  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+}
+
+static void UpdateState() {
+	BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+	LCD_DisplayString(5, 1, (uint8_t *) "direction");
+	LCD_DisplayString(6, 1, (uint8_t *) "step mode");
+	LCD_DisplayString(7, 1, (uint8_t *) "period(s)     ");
+
+	BSP_LCD_SetTextColor(LCD_COLOR_RED);
+	LCD_DisplayString(5, 12, (uint8_t *) (direction == CW ? "CW " : "CCW"));
+	LCD_DisplayString(6, 12, (uint8_t *) (mode == FULLSTEP ? "FULL" : "HALF"));
+	LCD_DisplayInt(7, 12, period);
+}
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	
 		if(GPIO_Pin == KEY_BUTTON_PIN)  //GPIO_PIN_0
 		{
-				
+			direction = direction == CW ? CCW : CW;
+			UpdateState();
 		}
 		
 		
 		if(GPIO_Pin == GPIO_PIN_1)
 		{
-				
-			
+			period++;
+			UpdateState();
 		}  //end of PIN_1
 
 		if(GPIO_Pin == GPIO_PIN_2)
 		{
-			
-		
-				
+			mode = mode == FULLSTEP ? HALFSTEP : FULLSTEP;
+			UpdateState();
 		} //end of if PIN_2	
 		
 		if(GPIO_Pin == GPIO_PIN_3)
 		{
-					
-					
-				
+			if (period > 5) {
+				period--;
+				UpdateState();
+			}
 		} //end of if PIN_23
 }
 
