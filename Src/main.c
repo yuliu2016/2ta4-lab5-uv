@@ -353,6 +353,14 @@ static void UpdateSettings() {
 	LCD_DisplayString(5, 12, (uint8_t *) (direction == CW ? "CW " : "CCW"));
 	LCD_DisplayString(6, 12, (uint8_t *) (mode == FULLSTEP ? "FULL" : "HALF"));
 	LCD_DisplayInt(7, 12, period);
+
+	// Calculate and update the ARR
+	if (mode == FULLSTEP) {
+		TIM3->ARR = 100 * period - 1;
+	} else {
+		TIM3->ARR = 50 * period - 1;
+	}
+	TIM3->EGR = TIM_EGR_UG;
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
@@ -403,7 +411,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)   //see  stm32fxx_ha
 		}
 	}
 	stepperState %= 8; // wrap around
-	LCD_DisplayInt(9, 12, stepperState);
 	StepperWrite(stepperState);
 }
 
